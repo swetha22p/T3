@@ -70,6 +70,7 @@ const diseases = ['Diabetes', 'Heart disease', 'Asthma', 'Cancer'];
 
 const Form1 = () => {
   const [medicalFormData, setMedicalFormData] = useState({});
+  const [data, setData] = useState([]);
   const [file, setFile] = useState(null);
   const [offlineStorageEnabled, setOfflineStorageEnabled] = useState(false);
   const [lastSyncTimestamp, setLastSyncTimestamp] = useState(null);
@@ -117,67 +118,126 @@ const Form1 = () => {
   };
   
     // You can trigger the submission of offline data to the server here
+   
+    // let prevFormattedTimestamp = null;
 
 
     const syncDataToMongoDB = async (formData, file) => {
       try {
         console.log('Sending data to MongoDB:', formData);
-        let syncTimestamp = null;
     
-        // Check for the last sync timestamp in IndexedDB
-        // const lastSyncTimestamp = await getLastSyncTimestamp();
-        // console.log('Last Sync Timestamp from IndexedDB:', lastSyncTimestamp);
+        // Check for the last sync timestamp in MongoDB
+        const mongoDBTimestampResponse = await fetch('http://localhost:5000/get_last_created_at');
+        let mongoDBTimestamp = null;
     
-        // If there is a file, upload it to MinIO and include the file URL in formData
-        let fileUrl = '';
-        if (file) {
-          const fileName = `medical_form_${Date.now()}_${file.name}`;
-          await minioUploader(file, fileName);
-          fileUrl = `${minioEndpoint}/${bucketName}/${fileName}`;
+        if (mongoDBTimestampResponse.ok) {
+          const mongoDBData = await mongoDBTimestampResponse.json();
+          mongoDBTimestamp = mongoDBData.lastSyncTimestamp;
+          console.log('Last Sync Timestamp from MongoDB:', mongoDBTimestamp);
+        } else {
+          console.error('Error fetching last sync timestamp from MongoDB:', mongoDBTimestampResponse.statusText);
+        }
+        const indexDBTimestampResponse = await fetch('http://localhost:5000/get_last_timestamp');
+        let indexDBTimestamp = null;
+    
+        if (indexDBTimestampResponse.ok) {
+          const indexDBData = await indexDBTimestampResponse.json();
+          indexDBTimestamp = indexDBData.lastSyncTimestamp;
+
+          const date = new Date(indexDBTimestamp);
+          const IDB = date.toUTCString();
+          console.log('Last Sync Timestamp from indexedDB:', IDB);
+        } else {
+          console.error('Error fetching last sync timestamp from MongoDB:', indexDBTimestampResponse.statusText);
         }
     
-        // Sync the data regardless of the email existence
-        const syncResponse = await axios.post('http://localhost:5000/medicalForm', {
-          ...formData,
-          fileUrl,
-        });
+        // Check for the last sync timestamp in IndexedDB
     
-        console.log('Data synced to MongoDB:', syncResponse.data);
+        const timestamp=formData.timestamp
+        const date = new Date(timestamp);
+        const formattedDateString = date.toUTCString();
+        console.log(formattedDateString);
+
+
+        console.log(indexDBTimestamp,formattedDateString,mongoDBTimestamp)
+      
+
+
     
-  
-    
-        // Save the sync timestamp to IndexedDB
-        await saveSyncTimestamp();
-        console.log('Sync Timestamp saved to MongoDB:', syncTimestamp);
-    
-        // Optionally, call your asynchronous function here if needed
-        // For example: callAsyncFunction();
-    
-      } catch (error) {
+        if (mongoDBTimestamp && formattedDateString && mongoDBTimestamp < formattedDateString) {
+        
+          console.log('indexed timestamp is higher. Syncing data...');
+          saveSyncTimestamp(); // Save the new timestamp to IndexedDB
+          // Continue with the sync process
+          let fileUrl = '';
+          if (file) {
+            const fileName = `medical_form_${Date.now()}_${file.name}`;
+            await minioUploader(file, fileName);
+            fileUrl = `${minioEndpoint}/${bucketName}/${fileName}`;
+          }
+      
+          const syncResponse = await axios.post('http://localhost:5000/medicalForm', {
+            ...formData,
+            fileUrl,
+          });
+      
+          console.log('Data synced to MongoDB:', syncResponse.data);
+        
+        if (indexDBTimestamp < formattedDateString  && formattedDateString < mongoDBTimestamp); {
+
+            console.log(indexDBTimestamp,formattedDateString,mongoDBTimestamp)
+        
+          
+            console.log(formattedDateString)
+            console.log('indexed gg timestamp is higher. Syncing data...');
+            saveSyncTimestamp(); // Save the new timestamp to IndexedDB
+            // Continue with the sync process
+            let fileUrl = '';
+            if (file) {
+              const fileName = `medical_form_${Date.now()}_${file.name}`;
+              await minioUploader(file, fileName);
+              fileUrl = `${minioEndpoint}/${bucketName}/${fileName}`;
+            }
+      
+            const syncResponse = await axios.post('http://localhost:5000/medicalForm', {
+              ...formData,
+              fileUrl,
+            });
+      
+            console.log('Data synced to MongoDB:', syncResponse.data);
+            
+          }
+        }
+        else {
+          console.log('No data to sync or MongoDB timestamp is not higher.');
+        }
+      }
+      
+       catch (error) {
         console.error('Error syncing data to MongoDB:', error);
       }
     };
-    
     
     const getLastSyncTimestamp = async () => {
       try {
         const response = await fetch('http://localhost:5000/get_last_created_at');
         if (response.ok) {
           const data = await response.json();
-          setLastSyncTimestamp(data.lastSyncTimestamp);
+          return data.lastSyncTimestamp;
         } else {
-          console.error('Error fetching last sync timestamp:', response.statusText);
+          console.error('Error fetching last sync timestamp from IndexedDB:', response.statusText);
+          return null;
         }
       } catch (error) {
-        console.error('Error fetching last sync timestamp:', error);
+        console.error('Error fetching last sync timestamp from IndexedDB:', error);
+        return null;
       }
     };
-    
     
     const saveSyncTimestamp = async () => {
       try {
         const response = await fetch('http://localhost:5000/saveSyncTimestamp');
-          
+    
         if (response.ok) {
           const data = await response.json();
           console.log('Sync Timestamp saved:', data.message);
@@ -189,6 +249,7 @@ const Form1 = () => {
         console.error('Error saving sync timestamp:', error);
       }
     };
+    
     
 
 
