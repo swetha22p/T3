@@ -33,18 +33,80 @@ mongo = PyMongo(app)
 #         # Handle the case when no document is found
 #         return jsonify({'error': 'No document found in the "medical_forms" collection.'}), 404
 
-@app.route('/saveSyncTimestamp', methods=['GET'])
+# @app.route('/saveSyncTimestamp', methods=['GET'])
+# def save_sync_timestamp():
+#     try:
+        
+#         timestamp = mongo.db.medical_forms.find_one(sort=[('createdAt', -1)],projection={'createdAt': 1})
+#         timestamp= timestamp['createdAt']
+#         print(f'createdAt value: {timestamp}')
+#         # Save the sync timestamp to MongoDB
+#         # mongo.db.syncTimestamps.insert_one({'timestamp': timestamp})
+
+#         return jsonify({"message": "Sync timestamp saved successfully"})
+#     except Exception as e:
+#         print('Error saving sync timestamp to MongoDB:', str(e))
+#         return jsonify({"error": str(e)}), 500
+
+
+
+
+@app.route('/get_last_created_at', methods=['GET'])
+def get_last_created_at():
+    try:
+        # Find the document with the latest createdAt value
+        latest_document = mongo.db.medical_forms.find_one(sort=[('createdAt', -1)], projection={'createdAt': 1})
+        
+        # Check if there is a document
+        if latest_document:
+            timestamp = latest_document['createdAt']
+            return jsonify({'lastSyncTimestamp': timestamp})
+        else:
+            timestamp = 0
+            utc_formatted_timestamp = datetime.utcfromtimestamp(timestamp / 1000.0).strftime('%a, %d %b %Y %H:%M:%S GMT')
+            return jsonify({'lastSyncTimestamp': utc_formatted_timestamp})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+    
+
+
+@app.route('/get_last_timestamp', methods=['GET'])
+def get_last_timestamp():
+    try:
+        # Find the document with the latest createdAt value
+        latest_document = mongo.db.medical_forms.find_one(sort=[('timestamp', -1)], projection={'timestamp': 1})
+        
+        # Check if there is a document
+        if latest_document:
+            timestamp = latest_document['timestamp']
+            return jsonify({'lastSyncTimestamp': timestamp})
+        else:
+            timestamp = 0
+            utc_formatted_timestamp = datetime.utcfromtimestamp(timestamp / 1000.0).strftime('%a, %d %b %Y %H:%M:%S GMT')
+            return jsonify({'lastSyncTimestamp': utc_formatted_timestamp})
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+
+    
+
+
+@app.route('/save_sync_timestamp', methods=['GET'])
 def save_sync_timestamp():
     try:
-        
-        timestamp = mongo.db.medical_forms.find_one({'createdAt': -1})
-        # Save the sync timestamp to MongoDB
-        mongo.db.syncTimestamps.insert_one({'timestamp': timestamp})
+        # Get the current timestamp
+        current_timestamp = datetime.utcnow()
 
-        return jsonify({"message": "Sync timestamp saved successfully"})
+        # Insert a new document with the current timestamp
+        result = mongo.db.medical_forms.insert_one({'createdAt': current_timestamp})
+
+        if result.inserted_id:
+            return jsonify({'message': 'Sync timestamp saved successfully'})
+        else:
+            return jsonify({'error': 'Failed to save sync timestamp'})
     except Exception as e:
-        print('Error saving sync timestamp to MongoDB:', str(e))
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)})
+
 
     
 
